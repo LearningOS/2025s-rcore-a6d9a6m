@@ -5,7 +5,7 @@
 
 
 ### 1.L40：刚进入 __restore 时，sp 代表了什么值。请指出 __restore 的两种使用情景。
-答：刚进入时，sp为当前程序的值，restore有
+答：刚进入时，sp为当前程序的值，restore
 ### 2.L43-L48：这几行汇编代码特殊处理了哪些寄存器？这些寄存器的的值对于进入用户态有何意义？请分别解释。
 ```
 ld t0, 32*8(sp)
@@ -25,6 +25,7 @@ ld x3, 3*8(sp)
    .set n, n+1
 .endr
 ```
+x2之后保存 ， x4程序不用
 ### 4.L60：该指令之后，sp 和 sscratch 中的值分别有什么意义？
 ```
 csrrw sp, sscratch, sp
@@ -42,3 +43,4 @@ csrrw sp, sscratch, sp
 交换后
 sp ->内核栈  ,sscratch -> 用户栈
 ### 7.从 U 态进入 S 态是哪一条指令发生的？
+csrrw sp, sscratch, sp
