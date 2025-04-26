@@ -32,9 +32,13 @@ csrrw sp, sscratch, sp
 答：交换了两者的值
 
 ### 5.__restore：中发生状态切换在哪一条指令？为何该指令执行之后会进入用户态？
+csrrw sp, sscratch, sp这一句，因为交换了用户态的栈和内核栈
+
 
 ### 6.L13：该指令之后，sp 和 sscratch 中的值分别有什么意义？
 ```
 csrrw sp, sscratch, sp
 ```
+交换后
+sp ->内核栈  ,sscratch -> 用户栈
 ### 7.从 U 态进入 S 态是哪一条指令发生的？

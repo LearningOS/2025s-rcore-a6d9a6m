@@ -10,6 +10,8 @@
 //! `sys_` then the name of the syscall. You can find functions like this in
 //! submodules, and you should also implement syscalls this way.
 
+
+
 /// write syscall
 const SYSCALL_WRITE: usize = 64;
 /// exit syscall
@@ -23,7 +25,7 @@ const SYSCALL_TRACE: usize = 410;
 
 mod fs;
 mod process;
-
+use crate::task::syscall_time_update;
 use fs::*;
 use process::*;
 
