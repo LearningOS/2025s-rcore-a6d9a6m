@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use crate::config::PAGE_SIZE;
-use crate::mm::{MapPermission, VirtAddr, VirtPageNum};
+use crate::mm::{get_page_from_vir, MapPermission, VirtAddr, VirtPageNum};
 use crate::timer::get_time_us;
 
 #[repr(C)]
