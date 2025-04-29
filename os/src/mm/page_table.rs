@@ -70,6 +70,9 @@ impl PageTableEntry {
     pub fn executable(&self) -> bool {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
     }
+    /// Check if User can get
+    pub fn is_for_user(&self) -> bool { (self.flags() & PTEFlags::V) != PTEFlags::empty() }
+
 }
 
 /// page table structure
