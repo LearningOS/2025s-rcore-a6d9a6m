@@ -9,6 +9,9 @@ use crate::{
         suspend_current_and_run_next,
     },
 };
+use crate::config::PAGE_SIZE;
+use crate::mm::{MapPermission, VirtAddr, VirtPageNum};
+use crate::timer::get_time_us;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -102,33 +105,81 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     // ---- release current PCB automatically
 }
 
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
+    trace!("kernel: sys_get_time");
+    let va = VirtAddr(ts as usize);
+    if let Some(pa) = get_page_from_vir(va) {
+        let time_us = get_time_us();
+        let tv = TimeVal {
+            sec: time_us / 1_000_000,
+            usec: time_us % 1_000_000,
+        };
+        let ts = pa.0 as *mut TimeVal;
+        unsafe {
+            *ts = tv;
+        }
+        0
+    } else {
+        -1
+    }
 }
 
-/// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+// YOUR JOB: Implement mmap.
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
+    trace!("kernel: sys_mmap  IMPLEMENTED YET!");
+    if start & (PAGE_SIZE - 1) != 0{
+        return -1;
+    }else if port & !0x7 != 0 || port & 0x7 == 0{
+        return -1;
+    }
+    let permission= MapPermission::from_bits((port as u8) << 1).unwrap() | MapPermission::U;
+    let current_task = current_task().unwrap();
+    let memory_set = &mut current_task.inner_exclusive_access().memory_set;
+
+    //check the pre vpn
+    let start_vpn = VirtPageNum::from(VirtAddr(start).floor());
+    let end_vpn = VirtPageNum::from(VirtAddr(start + len).ceil());
+    for vpn in start_vpn.0 .. end_vpn.0 {
+        if let Some(vpn) = memory_set.translate(VirtPageNum(vpn)) {
+            if vpn.is_valid() {
+                println!("mmap failed: address already mapped");
+                return -1;
+            }
+        }
+    }
+    //map new space
+    memory_set.insert_framed_area(VirtAddr::from(start) , VirtAddr::from(start+len),permission);
+    0
 }
 
-/// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+// YOUR JOB: Implement munmap.
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    trace!("kernel: sys_munmap TEST");
+    let current_task = current_task().unwrap();
+    let memory_set = &mut current_task.inner_exclusive_access().memory_set;
+    if start & (PAGE_SIZE-1) != 0 {
+        return -1;
+    }
+    let start_vpn = VirtPageNum::from(VirtAddr(start).floor());
+    let end_vpn = VirtPageNum::from(VirtAddr(start + len).ceil());
+    for vpn in start_vpn.0 .. end_vpn.0 {
+        if let Some(vpn) = memory_set.translate(VirtPageNum(vpn)) {
+            if !vpn.is_valid() {
+                println!("mmap failed: address already mapped");
+                return -1;
+            }
+        }
+    }
+    for area in memory_set.areas.iter_mut() {
+        if area.vpn_range.get_start() == VirtAddr::from(start).floor() && area.vpn_range.get_end() == VirtAddr::from(start+len).ceil(){
+            area.unmap(&mut memory_set.page_table);
+        }
+    }
+    0
 }
 
 /// change data segment size
@@ -148,14 +199,32 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
-}
+    let current_task = current_task().unwrap();
+    let new_task = current_task.fork();
+    let new_pid = new_task.pid.0;
+    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    trap_cx.x[10] = 0;
 
+
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        new_task.exec(data);
+        add_task(new_task);
+        new_pid as isize
+    } else {
+        -1
+    }
+}
 // YOUR JOB: Set task priority.
 pub fn sys_set_priority(_prio: isize) -> isize {
     trace!(
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio >=2{
+        _prio
+    }else{
+        -1
+    }
 }
