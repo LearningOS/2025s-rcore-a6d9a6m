@@ -38,8 +38,8 @@ pub fn kernel_token() -> usize {
 
 /// address space
 pub struct MemorySet {
-    page_table: PageTable,
-    areas: Vec<MapArea>,
+    pub(crate) page_table: PageTable,
+    pub(crate) areas: Vec<MapArea>,
 }
 
 impl MemorySet {
@@ -87,6 +87,15 @@ impl MemorySet {
             map_area.copy_data(&mut self.page_table, data);
         }
         self.areas.push(map_area);
+    }
+    /// Assume that no conflicts.
+    pub fn unmap(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        for area in self.areas.iter_mut() {
+            if area.vpn_range.get_start() == start_va.floor() && area.vpn_range.get_end() == end_va.ceil() {
+                area.unmap(&mut self.page_table);
+                break;
+            }
+        }
     }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
@@ -321,7 +330,7 @@ impl MemorySet {
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
-    vpn_range: VPNRange,
+    pub(crate) vpn_range: VPNRange,
     data_frames: BTreeMap<VirtPageNum, FrameTracker>,
     map_type: MapType,
     map_perm: MapPermission,

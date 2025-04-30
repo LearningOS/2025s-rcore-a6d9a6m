@@ -44,6 +44,17 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
+
+    ///mmap
+    pub fn mmap(&self,start:usize,len:usize,port:usize) -> isize{
+        let current = self.current.as_ref();
+        current.unwrap().mmap(start, len, port)
+    }
+    ///mumap
+    pub fn mumap(&self,start:usize,len:usize) -> isize{
+        let current = self.current.as_ref();
+        current.unwrap().munmap(start, len)
+    }
 }
 
 lazy_static! {
@@ -108,4 +119,13 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+///mmap
+pub fn mmap(start:usize,len:usize,port:usize) ->isize{
+    PROCESSOR.exclusive_access().mmap(start, len, port)
+}
+
+///mumap
+pub fn mumap(start:usize,len:usize) ->isize{
+    PROCESSOR.exclusive_access().mumap(start, len)
 }

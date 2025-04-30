@@ -1,6 +1,7 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::fs::{open_file, OpenFlags, Stat, StatMode};
+use crate::fs::inode::{inode_sys_linkat, inode_sys_unlinkat, ROOT_INODE};
+use crate::mm::{get_page_from_vir, translated_byte_buffer, translated_str, UserBuffer, VirtAddr};
 use crate::task::{current_task, current_user_token};
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
@@ -75,13 +76,48 @@ pub fn sys_close(fd: usize) -> isize {
     0
 }
 
+
 /// YOUR JOB: Implement fstat.
 pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
     trace!(
-        "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_fstat ",
         current_task().unwrap().pid.0
     );
-    -1
+    println!("the fd is {}",_fd);
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    let table = inner.fd_table.clone();
+    drop(inner);
+    if _fd >= table.len() {
+        println!("fd not fond");
+        return -1;
+    }
+    if let Some(file) = &table[_fd] {
+        let file = file.clone();
+        let val = VirtAddr(_st as usize);
+        if let Some(phys_address) = get_page_from_vir(val) {
+            current_task();
+            let ti = Stat{
+                dev: 0,
+                ino: file.inode() as u64,
+                mode:StatMode::FILE,
+                nlink: ROOT_INODE.get_nlink() as u32,
+                pad:[0;7],
+            };
+            let ts = phys_address.0 as *mut Stat;
+            unsafe {
+                *ts= ti;
+            }
+            return 0
+        }else{
+            println!("not found");
+            return -1
+        }
+    }else{
+        println!("fd not fond , the inner fd_table len is {}",table.len());
+        return -1
+    }
+
 }
 
 /// YOUR JOB: Implement linkat.
@@ -90,7 +126,10 @@ pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
         "kernel:pid[{}] sys_linkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let old_name = translated_str(token, _old_name);
+    let new_name = translated_str(token, _new_name);
+    inode_sys_linkat(old_name,new_name)
 }
 
 /// YOUR JOB: Implement unlinkat.
@@ -99,5 +138,8 @@ pub fn sys_unlinkat(_name: *const u8) -> isize {
         "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    println!("unlink at");
+    let token = current_user_token();
+    let name = translated_str(token, _name);
+    inode_sys_unlinkat(name)
 }

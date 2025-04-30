@@ -19,13 +19,26 @@ pub use memory_set::remap_test;
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
 use page_table::PTEFlags;
 pub use page_table::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator,
+    translated_byte_buffer, translated_refmut, translated_str, PageTable,
+    PageTableEntry, UserBuffer,
 };
+use crate::task::current_user_token;
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
     KERNEL_SPACE.exclusive_access().activate();
+}
+///to get a phs_page from a virtual address
+pub fn get_page_from_vir(virt_addr: VirtAddr) -> Option<PhysAddr>{
+    let offset = virt_addr.page_offset();
+    let vpn = virt_addr.floor();
+    let ppn = PageTable::from_token(current_user_token()).translate(vpn).map(|pte|pte.ppn());
+    if let Some(ppn) = ppn {
+        Some(PhysAddr(usize::from(PhysAddr::from(ppn)) + offset))
+    } else {
+        println!("malloc failed: {:x?}", virt_addr);
+        None
+    }
 }

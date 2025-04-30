@@ -5,15 +5,45 @@ use super::{
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::cell::{RefCell, RefMut};
 use spin::{Mutex, MutexGuard};
 /// Virtual filesystem layer over easy-fs
+
+
+/// In order to get mutable reference of inner data, call
+/// `exclusive_access`.
+pub struct UPSafeCell<T> {
+    /// inner data
+    inner: RefCell<T>,
+}
+
+unsafe impl<T> Sync for UPSafeCell<T> {}
+
+impl<T> UPSafeCell<T> {
+    /// User is responsible to guarantee that inner struct is only used in
+    /// uniprocessor.
+    pub unsafe fn new(value: T) -> Self {
+        Self {
+            inner: RefCell::new(value),
+        }
+    }
+    /// Panic if the data has been borrowed.
+    pub fn exclusive_access(&self) -> RefMut<'_, T> {
+        self.inner.borrow_mut()
+    }
+}
+///the inode
 pub struct Inode {
     block_id: usize,
     block_offset: usize,
     fs: Arc<Mutex<EasyFileSystem>>,
     block_device: Arc<dyn BlockDevice>,
+    inner:UPSafeCell<IodeInner>,
 }
-
+///the inner of inode
+pub struct IodeInner{
+    nlist: usize,
+}
 impl Inode {
     /// Create a vfs inode
     pub fn new(
@@ -22,11 +52,14 @@ impl Inode {
         fs: Arc<Mutex<EasyFileSystem>>,
         block_device: Arc<dyn BlockDevice>,
     ) -> Self {
-        Self {
-            block_id: block_id as usize,
-            block_offset,
-            fs,
-            block_device,
+        unsafe {
+            Self {
+                block_id: block_id as usize,
+                block_offset,
+                fs,
+                block_device,
+                inner: UPSafeCell::new(IodeInner { nlist: 1 }),
+            }
         }
     }
     /// Call a function over a disk inode to read it
@@ -53,7 +86,7 @@ impl Inode {
                 DIRENT_SZ,
             );
             if dirent.name() == name {
-                return Some(dirent.inode_id() as u32);
+                return Some(dirent.inode_id());
             }
         }
         None
@@ -72,6 +105,71 @@ impl Inode {
                 ))
             })
         })
+    }
+    ///nlist_upgrade
+    pub fn nlist_upgrade(&self){
+        let mut inner = self.inner.exclusive_access();
+        inner.nlist += 1;
+    }
+    ///nlist_upgrade
+    pub fn nlist_deupgrade(&self){
+        let mut inner = self.inner.exclusive_access();
+        inner.nlist -= 1;
+    }
+    ///get nlink
+    pub fn get_nlink(&self) -> usize{
+        let inner = self.inner.exclusive_access();
+        inner.nlist
+    }
+    ///system link at
+    pub fn sys_linkat(&self, _old_name: String, _new_name: String) -> Option<Arc<isize>> {
+        self.modify_disk_inode(|root_inode| {
+            let id =self.find_inode_id(&_old_name, root_inode);
+            if let Some(the_id) = id {
+                let mut fs = self.fs.lock();
+                // append file in the dirent
+                let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                let new_size = (file_count + 1) * DIRENT_SZ;
+                // increase size
+                self.increase_size(new_size as u32, root_inode, &mut fs);
+                // write dirent
+                let dirent = DirEntry::new(&_new_name, the_id);
+                root_inode.write_at(
+                    file_count * DIRENT_SZ,
+                    dirent.as_bytes(),
+                    &self.block_device,
+                );
+                self.nlist_upgrade();
+                return Some(Arc::new(0));
+            }
+            return Some(Arc::new(-1));
+        });
+        Some(Arc::new(-1))
+
+    }
+    /// system unlink at.
+    pub fn sys_unlinkat(&self, _name: String) -> Option<Arc<isize>> {
+        self.modify_disk_inode(|root_inode| {
+            // append file in the dirent
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            for i in 0..file_count {
+                let new_dirent = DirEntry::empty();
+                let mut dirent = DirEntry::empty();
+                assert_eq!(root_inode.read_at(DIRENT_SZ * i,dirent.as_bytes_mut(),&self.block_device,),DIRENT_SZ,);
+                if dirent.name() == _name {
+                    root_inode.write_at(
+                        DIRENT_SZ * i,
+                        new_dirent.as_bytes(),
+                        &self.block_device,
+                    );
+                    self.nlist_deupgrade();
+                    return Some(Arc::new(0));
+                }
+            }
+            return Some(Arc::new(0));
+        });
+        Some(Arc::new(0))
+
     }
     /// Increase the size of a disk inode
     fn increase_size(
@@ -182,5 +280,17 @@ impl Inode {
             }
         });
         block_cache_sync_all();
+    }
+    ///get block_offset
+    pub fn get_block_offset(&self) -> usize{
+        self.block_offset
+    }
+    ///block_id
+    pub fn get_block_id(&self)-> usize{
+        self.block_id
+    }
+    ///fs
+    pub fn get_fs(&self) -> MutexGuard<EasyFileSystem>{
+        self.fs.lock()
     }
 }
