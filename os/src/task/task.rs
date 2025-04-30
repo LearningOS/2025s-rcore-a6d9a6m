@@ -42,10 +42,11 @@ pub struct TaskControlBlockInner {
     pub task_status: TaskStatus,
     /// It is set when active exit or execution error occurs
     pub exit_code: Option<i32>,
-    /// The number of semaphores that the thread has
-    pub allocation : Vec<(usize, isize)>,
-    /// The number of semaphores that the thread needs
-    pub need : Vec<(usize, isize)>,
+
+    /// Semaphore need
+    pub need: Vec<(usize, isize)>,
+    /// Semaphore allocation
+    pub allocation: Vec<(usize, isize)>,
 }
 
 impl TaskControlBlockInner {
@@ -57,8 +58,6 @@ impl TaskControlBlockInner {
     fn get_status(&self) -> TaskStatus {
         self.task_status
     }
-
-
 }
 
 impl TaskControlBlock {

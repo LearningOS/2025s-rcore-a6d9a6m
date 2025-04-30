@@ -49,7 +49,7 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
-    /// detect deadlock or not
+    /// deadlock detection
     pub deadlock_detection: bool,
 }
 

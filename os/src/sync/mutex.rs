@@ -12,7 +12,6 @@ pub trait Mutex: Sync + Send {
     fn lock(&self);
     /// Unlock the mutex
     fn unlock(&self);
-
     /// is locking
     fn is_locking(&self) -> bool;
 }
@@ -55,7 +54,7 @@ impl Mutex for MutexSpin {
     }
 
     fn is_locking(&self) -> bool {
-        *(self.locked.exclusive_access())
+        *self.locked.exclusive_access()
     }
 }
 
